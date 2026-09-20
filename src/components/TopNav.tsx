@@ -24,14 +24,16 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenContact }) => {
     <header className="bg-[#1f1730]/95 backdrop-blur-md border-b-[3px] border-[#5a3696] shadow-[0px_4px_0px_#0a0514] sticky top-0 z-50">
       <div className="w-full px-4 sm:px-6 py-3 max-w-[1200px] mx-auto flex items-center justify-between">
         {/* Brand Logo */}
-        <a href="#hero" className="flex items-center gap-2 group">
-          <div className="w-9 h-9 bg-[#f6c833] border-[3px] border-black flex items-center justify-center shadow-[2px_2px_0px_#0a0514] group-hover:rotate-6 transition-transform">
-            <span className="material-symbols-outlined text-[#120a21] font-bold text-xl">
-              videogame_asset
-            </span>
+        <a href="#hero" className="flex items-center gap-2.5 group">
+          <div className="w-9 h-9 bg-[#120a21] border-[2px] border-[#f6c833] shadow-[2px_2px_0px_#0a0514] flex items-center justify-center p-1 group-hover:rotate-6 transition-transform overflow-hidden">
+            <img
+              src="/favicon.svg"
+              alt="Logo MY WORLD"
+              className="w-full h-full object-contain"
+            />
           </div>
           <span className="text-lg font-['Space_Grotesk'] font-extrabold text-[#f6c833] arcade-glow-gold tracking-wider">
-            🎮 MY WORLD
+            MY WORLD
           </span>
         </a>
 
