@@ -120,6 +120,9 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
       item.id === editingPhoto.id ? editingPhoto : item
     );
     updateList(updated);
+    if (selectedPhoto && selectedPhoto.id === editingPhoto.id) {
+      setSelectedPhoto(editingPhoto);
+    }
     setUploadNotice(`Đã cập nhật thông tin ảnh "${editingPhoto.title}"!`);
     setEditingPhoto(null);
     setTimeout(() => setUploadNotice(null), 3000);
@@ -492,16 +495,18 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
             <div className="mt-3 font-['Space_Mono']">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-[#1a0f2e]">{selectedPhoto.title}</h4>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingPhoto(selectedPhoto);
-                    setSelectedPhoto(null);
-                  }}
-                  className="text-xs bg-[#f6c833] text-[#120a21] px-2 py-0.5 border border-black font-bold flex items-center gap-1 cursor-pointer hover:bg-[#d4a414]"
-                >
-                  ✎ Sửa tiêu đề
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPhoto(selectedPhoto);
+                      setSelectedPhoto(null);
+                    }}
+                    className="text-xs bg-[#f6c833] text-[#120a21] px-2 py-0.5 border border-black font-bold flex items-center gap-1 cursor-pointer hover:bg-[#d4a414]"
+                  >
+                    ✎ Sửa ảnh / Tiêu đề
+                  </button>
+                </div>
               </div>
               <div className="flex justify-between items-center text-xs mt-1">
                 <span className="text-[#5a3696] font-bold">{selectedPhoto.tags.join(' ')}</span>
@@ -652,13 +657,72 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
             </div>
 
             <form onSubmit={handleSaveEditPhoto} className="p-5 space-y-4 font-['Space_Mono']">
-              <div className="w-full h-36 bg-[#120a21] border-2 border-black/30 overflow-hidden flex items-center justify-center">
-                <img
-                  src={editingPhoto.image}
-                  alt={editingPhoto.title}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-contain"
-                />
+              {/* Image Preview and Changer */}
+              <div>
+                <label className="block text-[11px] font-bold text-[#f6c833] uppercase mb-1">
+                  Hình ảnh (Nhấn để đổi ảnh mới hoặc tải từ máy):
+                </label>
+                <div className="flex gap-3 items-center">
+                  <div className="w-28 h-28 bg-[#120a21] border-2 border-black/50 overflow-hidden flex items-center justify-center shrink-0 relative group">
+                    <img
+                      key={editingPhoto.image}
+                      src={editingPhoto.image}
+                      alt={editingPhoto.title}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                    <label
+                      htmlFor="editPhotoFileInput"
+                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-[10px] font-bold text-center p-1"
+                    >
+                      <span className="material-symbols-outlined text-lg">upload</span>
+                      <span>ĐỔI ẢNH</span>
+                    </label>
+                  </div>
+
+                  <div className="flex-1 space-y-2">
+                    <input
+                      id="editPhotoFileInput"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const newBase64 = ev.target?.result as string;
+                            if (newBase64) {
+                              setEditingPhoto({ ...editingPhoto, image: newBase64 });
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    <label
+                      htmlFor="editPhotoFileInput"
+                      className="inline-flex items-center gap-1.5 bg-[#45b7d1] hover:bg-[#38a0b8] text-[#120a21] text-xs font-bold px-3 py-1.5 border border-black cursor-pointer shadow-[2px_2px_0px_#0a0514]"
+                    >
+                      <span className="material-symbols-outlined text-sm">upload_file</span>
+                      <span>CHỌN ẢNH TỪ MÁY...</span>
+                    </label>
+
+                    <div className="text-[10px] text-[#eaddff]/80">Hoặc dán URL ảnh trực tiếp:</div>
+                    <input
+                      type="url"
+                      placeholder="https://... dán link ảnh"
+                      value={editingPhoto.image.startsWith('data:') ? '' : editingPhoto.image}
+                      onChange={(e) => {
+                        if (e.target.value.trim()) {
+                          setEditingPhoto({ ...editingPhoto, image: e.target.value.trim() });
+                        }
+                      }}
+                      className="w-full bg-[#120a21] border border-[#5a3696] focus:border-[#45b7d1] text-[#f3eeff] px-2.5 py-1 text-xs outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
