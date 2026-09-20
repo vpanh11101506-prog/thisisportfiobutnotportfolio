@@ -119,9 +119,6 @@ export const AdminModals: React.FC = () => {
               <p>
                 Mọi người bấm vào link sẽ ở chế độ <strong>Người xem (Viewer)</strong> và KHÔNG THỂ thay đổi ảnh hay xóa bất kỳ thứ gì của bạn.
               </p>
-              <p className="text-[11px] text-[#f6c833]">
-                💡 Mật khẩu mặc định: <span className="bg-[#2e263f] px-1.5 py-0.5 border border-[#5a3696] font-mono select-all font-bold">phuonganh123</span> (Bạn có thể đổi mật khẩu bất kỳ lúc nào sau khi đăng nhập).
-              </p>
             </div>
 
             {/* Error Message */}

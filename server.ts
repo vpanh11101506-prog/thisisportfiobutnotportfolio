@@ -37,11 +37,11 @@ function loadState(): PortfolioState {
     if (fs.existsSync(STATE_FILE)) {
       const raw = fs.readFileSync(STATE_FILE, 'utf-8');
       const state = JSON.parse(raw);
-      // Initialize default admin password if not yet set (default: phuonganh123)
+      // Initialize default admin password if not yet set
       if (!state.adminPasswordHash) {
         const defaultSalt = crypto.randomBytes(16).toString('hex');
         state.adminPasswordSalt = defaultSalt;
-        state.adminPasswordHash = hashPassword('phuonganh123', defaultSalt);
+        state.adminPasswordHash = hashPassword('suny0307', defaultSalt);
         saveState(state);
       }
       return state;
@@ -54,7 +54,7 @@ function loadState(): PortfolioState {
   const defaultSalt = crypto.randomBytes(16).toString('hex');
   const initialState: PortfolioState = {
     adminPasswordSalt: defaultSalt,
-    adminPasswordHash: hashPassword('phuonganh123', defaultSalt),
+    adminPasswordHash: hashPassword('suny0307', defaultSalt),
   };
   saveState(initialState);
   return initialState;
