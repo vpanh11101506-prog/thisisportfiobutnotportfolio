@@ -1,0 +1,7 @@
+{
+  "name": "MY WORLD - Võ Phương Anh Portfolio",
+  "description": "16-bit retro RPG arcade portfolio for Võ Phương Anh, featuring interactive character stats, 4-direction chibi sprite controller, skill inventory backpack, quest log, 8-bit lofi audio player, and polaroid photo pinboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
