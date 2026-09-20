@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AVATAR_URL } from '../data/portfolioData';
 import { spawnPixelBurst } from '../utils/fx';
 import { ChibiViewer } from './ChibiViewer';
+import { fetchPortfolioState, saveServerAvatar, resetServerAvatar } from '../utils/portfolioApi';
+import { useAuth } from '../context/AuthContext';
 
 interface HeroSectionProps {
   onOpenContact: (e?: React.MouseEvent) => void;
@@ -11,6 +13,7 @@ interface HeroSectionProps {
 const AVATAR_STORAGE_KEY = 'pa_custom_avatar_v1';
 
 export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenContact, onSendLove }) => {
+  const { isAdmin, openLoginModal } = useAuth();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarSrc, setAvatarSrc] = useState<string>(() => {
     try {
@@ -22,6 +25,23 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenContact, onSendL
     return AVATAR_URL;
   });
   const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
+  const [isSavingServer, setIsSavingServer] = useState(false);
+  const [showUrlDialog, setShowUrlDialog] = useState(false);
+  const [customUrlInput, setCustomUrlInput] = useState('');
+
+  // Tải ảnh mới nhất từ máy chủ để bất kỳ ai mở link cũng thấy ảnh mới của bạn
+  useEffect(() => {
+    fetchPortfolioState().then((state) => {
+      if (state.avatarUrl) {
+        setAvatarSrc(state.avatarUrl);
+        try {
+          localStorage.setItem(AVATAR_STORAGE_KEY, state.avatarUrl);
+        } catch {
+          // ignore
+        }
+      }
+    });
+  }, []);
 
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,8 +52,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenContact, onSendL
       return;
     }
 
+    setIsSavingServer(true);
+    setAvatarNotice('Đang lưu ảnh lên máy chủ để ai mở link cũng thấy ảnh mới... ⏳');
+
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target?.result as string;
       if (base64) {
         setAvatarSrc(base64);
@@ -42,23 +65,66 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenContact, onSendL
         } catch {
           // ignore quota
         }
-        setAvatarNotice('Đã cập nhật ảnh đại diện mới thành công! ✨');
-        setTimeout(() => setAvatarNotice(null), 3500);
+
+        const res = await saveServerAvatar(base64);
+        setIsSavingServer(false);
+        if (res.success && res.avatarUrl) {
+          setAvatarSrc(res.avatarUrl);
+          try {
+            localStorage.setItem(AVATAR_STORAGE_KEY, res.avatarUrl);
+          } catch {
+            // ignore
+          }
+          setAvatarNotice('✨ ĐÃ CẬP NHẬT ẢNH THÀNH CÔNG! Bất kỳ ai mở link này đều sẽ thấy ảnh mới của bạn!');
+        } else {
+          setAvatarNotice('✨ Đã cập nhật ảnh thành công!');
+        }
+        setTimeout(() => setAvatarNotice(null), 5000);
       }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  const handleResetAvatar = (e: React.MouseEvent) => {
+  const handleSaveUrlAvatar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUrl = customUrlInput.trim();
+    if (!cleanUrl) return;
+
+    setIsSavingServer(true);
+    setAvatarNotice('Đang lưu link ảnh lên máy chủ... ⏳');
+    setAvatarSrc(cleanUrl);
+    setShowUrlDialog(false);
+    setCustomUrlInput('');
+
+    try {
+      localStorage.setItem(AVATAR_STORAGE_KEY, cleanUrl);
+    } catch {
+      // ignore
+    }
+
+    const res = await saveServerAvatar(cleanUrl);
+    setIsSavingServer(false);
+    if (res.success) {
+      setAvatarNotice('✨ ĐÃ LƯU ẢNH LÊN MÁY CHỦ! Người khác bấm link sẽ thấy ngay ảnh mới này!');
+    } else {
+      setAvatarNotice('✨ Đã cập nhật ảnh đại diện mới!');
+    }
+    setTimeout(() => setAvatarNotice(null), 5000);
+  };
+
+  const handleResetAvatar = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    setIsSavingServer(true);
     setAvatarSrc(AVATAR_URL);
     try {
       localStorage.removeItem(AVATAR_STORAGE_KEY);
     } catch {
       // ignore
     }
-    setAvatarNotice('Đã khôi phục ảnh đại diện mặc định!');
+    await resetServerAvatar();
+    setIsSavingServer(false);
+    setAvatarNotice('Đã khôi phục ảnh đại diện ban đầu!');
     setTimeout(() => setAvatarNotice(null), 3000);
   };
 
@@ -134,18 +200,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenContact, onSendL
                   className="w-full h-full object-cover border-[3px] border-[#5a3696] bg-[#120a21] select-none group-hover:scale-105 transition-transform duration-300"
                 />
                 
-                {/* Hover Overlay Button to change avatar */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    avatarInputRef.current?.click();
-                  }}
-                  className="absolute inset-x-3 bottom-8 bg-[#120a21]/90 hover:bg-[#f6c833] text-[#f6c833] hover:text-[#120a21] border border-[#f6c833] py-1 font-['Space_Mono'] text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">photo_camera</span>
-                  <span>ĐỔI ẢNH ĐẠI DIỆN NÀY</span>
-                </button>
+                {/* Hover Overlay Button to change avatar - Admin only */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      avatarInputRef.current?.click();
+                    }}
+                    className="absolute inset-x-3 bottom-8 bg-[#120a21]/90 hover:bg-[#f6c833] text-[#f6c833] hover:text-[#120a21] border border-[#f6c833] py-1 font-['Space_Mono'] text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">photo_camera</span>
+                    <span>ĐỔI ẢNH ĐẠI DIỆN NÀY</span>
+                  </button>
+                )}
 
                 <div className="absolute bottom-2 left-2 right-2 bg-[#120a21]/95 text-[#f6c833] text-center py-0.5 font-['Space_Mono'] text-[10px] select-none border border-[#5a3696] font-bold">
                   STATUS: ĐANG ONLINE &amp; KHÁM PHÁ THẾ GIỚI SỐ
@@ -153,27 +221,119 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenContact, onSendL
               </div>
             </div>
 
-            {/* Quick avatar buttons */}
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => avatarInputRef.current?.click()}
-                className="bg-[#45b7d1] hover:bg-[#38a0b8] text-[#120a21] text-[11px] font-['Space_Mono'] font-bold px-3 py-1 border border-black shadow-[2px_2px_0px_#0a0514] flex items-center gap-1 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-xs">upload</span>
-                <span>TẢI ẢNH MỚI CHO AVATAR</span>
-              </button>
-              {avatarSrc !== AVATAR_URL && (
+            {/* Avatar controls: Only shown for ADMIN */}
+            {isAdmin ? (
+              <>
+                <div className="mt-2 flex flex-wrap justify-center items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSavingServer}
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="bg-[#45b7d1] hover:bg-[#38a0b8] text-[#120a21] text-[11px] font-['Space_Mono'] font-bold px-3 py-1.5 border border-black shadow-[2px_2px_0px_#0a0514] flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-xs">upload</span>
+                    <span>{isSavingServer ? 'ĐANG LƯU SERVER...' : 'TẢI ẢNH MỚI LÊN LINK'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingServer}
+                    onClick={() => setShowUrlDialog(true)}
+                    className="bg-[#f6c833] hover:bg-[#e0b020] text-[#120a21] text-[11px] font-['Space_Mono'] font-bold px-2.5 py-1.5 border border-black shadow-[2px_2px_0px_#0a0514] flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-xs">link</span>
+                    <span>DÁN LINK ẢNH</span>
+                  </button>
+                  {avatarSrc !== AVATAR_URL && (
+                    <button
+                      type="button"
+                      disabled={isSavingServer}
+                      onClick={handleResetAvatar}
+                      title="Khôi phục ảnh gốc ban đầu"
+                      className="bg-[#2e263f] hover:bg-[#ef4444] hover:text-white text-[#d1c5ad] text-[11px] font-['Space_Mono'] font-bold px-2 py-1.5 border border-black shadow-[2px_2px_0px_#0a0514] cursor-pointer disabled:opacity-50"
+                    >
+                      ↺ GỐC
+                    </button>
+                  )}
+                </div>
+
+                {/* Server Sync Indicator for Admin */}
+                <div className="mt-2 text-[10px] font-['Space_Mono'] text-[#26c281] bg-[#120a21]/90 border border-[#26c281]/40 px-2.5 py-1 flex items-center gap-1.5 shadow-[1px_1px_0px_#000]">
+                  <span className="w-2 h-2 rounded-full bg-[#26c281] inline-block animate-pulse shrink-0" />
+                  <span>👑 Admin: Ảnh tải lên sẽ lưu vĩnh viễn trên máy chủ cho mọi người xem</span>
+                </div>
+              </>
+            ) : (
+              /* Viewer Mode: Read-only, prevents strangers from modifying */
+              <div className="mt-2 flex flex-col items-center gap-1">
+                <div className="text-[10px] font-['Space_Mono'] text-[#d1c5ad] bg-[#120a21]/80 border border-[#5a3696] px-2.5 py-1 flex items-center gap-1.5 shadow-[1px_1px_0px_#000]">
+                  <span className="material-symbols-outlined text-[#45b7d1] text-xs">lock</span>
+                  <span>Chế độ Người xem (Viewer) — Nội dung được bảo vệ</span>
+                </div>
                 <button
                   type="button"
-                  onClick={handleResetAvatar}
-                  title="Khôi phục ảnh gốc"
-                  className="bg-[#2e263f] hover:bg-[#ef4444] hover:text-white text-[#d1c5ad] text-[11px] font-['Space_Mono'] font-bold px-2 py-1 border border-black shadow-[2px_2px_0px_#0a0514] cursor-pointer"
+                  onClick={openLoginModal}
+                  className="text-[10px] font-['Space_Mono'] text-[#f6c833] hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  ↺ GỐC
+                  <span>Bạn là Phương Anh? Bấm vào đây để đăng nhập Admin</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
                 </button>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* URL Dialog Modal */}
+            {showUrlDialog && (
+              <div
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                onClick={() => setShowUrlDialog(false)}
+              >
+                <div
+                  className="bg-[#1f1730] border-[3px] border-[#f6c833] pixel-box-sm p-5 w-full max-w-md shadow-[6px_6px_0px_#0a0514]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b-2 border-[#5a3696] pb-2 mb-3">
+                    <h3 className="text-sm font-bold text-[#f6c833] font-['Space_Grotesk'] flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base">link</span>
+                      <span>DÁN ĐƯỜNG DẪN ẢNH (URL)</span>
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowUrlDialog(false)}
+                      className="text-[#eaddff] hover:text-[#ef4444] font-bold text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <form onSubmit={handleSaveUrlAvatar} className="space-y-3 font-['Space_Mono']">
+                    <p className="text-xs text-[#eaddff]">
+                      Nhập link ảnh (từ Google Drive, Pinterest, Facebook, Imgur, v.v.). Link này sẽ được lưu lên server và hiển thị cho bất kỳ ai mở trang web của bạn:
+                    </p>
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://example.com/my-photo.jpg"
+                      value={customUrlInput}
+                      onChange={(e) => setCustomUrlInput(e.target.value)}
+                      className="w-full bg-[#120a21] border-2 border-[#5a3696] focus:border-[#f6c833] text-xs text-[#f3eeff] px-3 py-2 outline-none"
+                    />
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowUrlDialog(false)}
+                        className="px-3 py-1 bg-[#2e263f] text-xs text-[#d1c5ad] border border-black"
+                      >
+                        HỦY
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-1 bg-[#f6c833] hover:bg-[#d4a414] text-xs text-[#120a21] font-bold border border-black shadow-[2px_2px_0px_#000]"
+                      >
+                        LƯU LÊN SERVER
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* Achievement Badges Strip */}
             <div className="mt-4 flex flex-wrap justify-center gap-2">

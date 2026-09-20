@@ -8,6 +8,8 @@ import { SkillInventory } from './components/SkillInventory';
 import { SocialModal } from './components/SocialModal';
 import { TopNav } from './components/TopNav';
 import { PixelCanvasBackground } from './components/PixelCanvasBackground';
+import { AdminModals } from './components/AdminModals';
+import { AuthProvider } from './context/AuthContext';
 import { COSMIC_BG_URL } from './data/portfolioData';
 import { spawnFlyingHeart } from './utils/fx';
 import { playRetroBeep } from './utils/audioSynth';
@@ -61,36 +63,41 @@ export default function App() {
   };
 
   return (
-    <div className="crt-scanlines text-[#eaddff] font-['Space_Mono'] antialiased min-h-screen relative overflow-x-hidden">
-      {/* Full-Page Pixel Cosmic Space Background */}
-      <div
-        className="fixed inset-0 w-full h-full bg-cover bg-center opacity-45 pointer-events-none z-0 pixelated-render"
-        style={{
-          backgroundImage: `url('${COSMIC_BG_URL}')`,
-          backgroundAttachment: 'fixed',
-        }}
-      />
+    <AuthProvider>
+      <div className="crt-scanlines text-[#eaddff] font-['Space_Mono'] antialiased min-h-screen relative overflow-x-hidden bg-[#0b0717]">
+        {/* Full-Page Pixel Cosmic Space Background */}
+        <div
+          className="fixed inset-0 w-full h-full bg-cover bg-center opacity-45 pointer-events-none z-0 pixelated-render"
+          style={{
+            backgroundImage: `url('${COSMIC_BG_URL}')`,
+            backgroundAttachment: 'fixed',
+          }}
+        />
 
-      {/* Dynamic Animated Floating Pixel Canvas (Pixel bay bay lơ lửng) */}
-      <PixelCanvasBackground />
+        {/* Dynamic Animated Floating Pixel Canvas (Pixel bay bay lơ lửng) */}
+        <PixelCanvasBackground />
 
-      {/* Top HUD Nav */}
-      <TopNav onOpenContact={handleOpenContact} />
+        {/* Top HUD Nav */}
+        <TopNav onOpenContact={handleOpenContact} />
 
-      {/* Main Canvas Content */}
-      <main className="max-w-[1200px] mx-auto px-4 md:px-6 py-8 space-y-12 relative z-10">
-        <HeroSection onOpenContact={handleOpenContact} onSendLove={handleSendLove} />
-        <SkillInventory />
-        <QuestLog />
-        <HobbiesZone friendshipHearts={friendshipHearts} onSendLove={handleSendLove} />
-        <PolaroidPinboard onOpenContact={handleOpenContact} />
-      </main>
+        {/* Main Canvas Content */}
+        <main className="max-w-[1200px] mx-auto px-4 md:px-6 py-8 space-y-12 relative z-10">
+          <HeroSection onOpenContact={handleOpenContact} onSendLove={handleSendLove} />
+          <SkillInventory />
+          <QuestLog />
+          <HobbiesZone friendshipHearts={friendshipHearts} onSendLove={handleSendLove} />
+          <PolaroidPinboard onOpenContact={handleOpenContact} />
+        </main>
 
-      {/* Retro Social Popup Modal */}
-      <SocialModal isOpen={isContactModalOpen} onClose={handleCloseContact} />
+        {/* Retro Social Popup Modal */}
+        <SocialModal isOpen={isContactModalOpen} onClose={handleCloseContact} />
 
-      {/* Arcade Footer */}
-      <Footer onOpenContact={handleOpenContact} />
-    </div>
+        {/* Admin Login & Password Modals */}
+        <AdminModals />
+
+        {/* Arcade Footer */}
+        <Footer onOpenContact={handleOpenContact} />
+      </div>
+    </AuthProvider>
   );
 }

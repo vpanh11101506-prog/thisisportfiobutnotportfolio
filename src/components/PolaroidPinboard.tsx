@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { POLAROID_ITEMS } from '../data/portfolioData';
 import { PolaroidItem } from '../types';
 import { spawnPixelBurst } from '../utils/fx';
+import { fetchPortfolioState, saveServerPhotos } from '../utils/portfolioApi';
+import { useAuth } from '../context/AuthContext';
 
 interface PolaroidPinboardProps {
   onOpenContact: (e?: React.MouseEvent) => void;
@@ -19,6 +21,7 @@ interface PendingUploadItem {
 }
 
 export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContact }) => {
+  const { isAdmin, openLoginModal } = useAuth();
   const [selectedPhoto, setSelectedPhoto] = useState<PolaroidItem | null>(null);
   const [editingPhoto, setEditingPhoto] = useState<PolaroidItem | null>(null);
   const [pendingUpload, setPendingUpload] = useState<PendingUploadItem | null>(null);
@@ -41,7 +44,21 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
-  // Save changes to localStorage
+  // Tải danh sách ảnh từ server để bất kỳ ai mở link cũng thấy ảnh mới
+  useEffect(() => {
+    fetchPortfolioState().then((state) => {
+      if (state.photos && Array.isArray(state.photos) && state.photos.length > 0) {
+        setPolaroidList(state.photos);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state.photos));
+        } catch {
+          // ignore
+        }
+      }
+    });
+  }, []);
+
+  // Save changes to localStorage AND to the server for all visitors
   const updateList = (newList: PolaroidItem[]) => {
     setPolaroidList(newList);
     try {
@@ -49,11 +66,13 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
     } catch {
       // ignore storage quota error
     }
+    saveServerPhotos(newList);
   };
 
   const handleResetToDefault = () => {
     setPolaroidList(POLAROID_ITEMS);
     localStorage.removeItem(LOCAL_STORAGE_KEY);
+    saveServerPhotos(POLAROID_ITEMS);
     setUploadNotice('Đã khôi phục danh sách ảnh mặc định!');
     setTimeout(() => setUploadNotice(null), 3000);
   };
@@ -129,6 +148,11 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      setUploadNotice('🛡️ Bạn đang ở chế độ Người xem (Viewer). Vui lòng đăng nhập Admin để ghim ảnh!');
+      setTimeout(() => setUploadNotice(null), 4000);
+      return;
+    }
     const files = e.target.files;
     if (files && files.length > 0) {
       Array.from(files).forEach((file) => processImageFile(file));
@@ -137,7 +161,7 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
     }
   };
 
-  // Support paste image (Ctrl+V / Cmd+V)
+  // Support paste image (Ctrl+V / Cmd+V) - Admin only
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -145,6 +169,11 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
 
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.startsWith('image/')) {
+          if (!isAdmin) {
+            setUploadNotice('🛡️ Bạn đang ở chế độ Người xem (Viewer). Vui lòng đăng nhập Admin để dán ảnh!');
+            setTimeout(() => setUploadNotice(null), 4000);
+            return;
+          }
           const file = items[i].getAsFile();
           if (file) {
             processImageFile(file);
@@ -156,10 +185,15 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [polaroidList]);
+  }, [polaroidList, isAdmin]);
 
   const handleRemovePhoto = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isAdmin) {
+      setUploadNotice('🛡️ Chỉ Admin mới có quyền xóa ảnh!');
+      setTimeout(() => setUploadNotice(null), 3000);
+      return;
+    }
     const updated = polaroidList.filter((p) => p.id !== id);
     updateList(updated);
     setUploadNotice('Đã gỡ ảnh khỏi bảng ghim.');
@@ -170,7 +204,9 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDraggingOver(true);
+    if (isAdmin) {
+      setIsDraggingOver(true);
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -181,6 +217,11 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(false);
+    if (!isAdmin) {
+      setUploadNotice('🛡️ Bạn đang ở chế độ Người xem (Viewer). Vui lòng đăng nhập Admin để ghim ảnh!');
+      setTimeout(() => setUploadNotice(null), 4000);
+      return;
+    }
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       Array.from(files).forEach((file) => processImageFile(file));
@@ -207,25 +248,46 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
             📌 BẢNG GHIM KỶ NIỆM &amp; POLAROID (PHOTO PINBOARD)
           </h2>
         </div>
+
+        {/* Header Actions depending on Admin / Viewer */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="font-['Space_Mono'] text-xs bg-[#26c281] hover:bg-[#20a36c] text-[#120a21] font-bold border-[2px] border-black px-3 py-1.5 shadow-[2px_2px_0px_#0a0514] cursor-pointer pixel-btn-action flex items-center gap-1.5"
-            title="Tải lên tệp ảnh gốc của bạn hoặc kéo thả / dán Ctrl+V"
-          >
-            <span className="material-symbols-outlined text-sm">upload_file</span>
-            <span>TẢI ẢNH CỦA BẠN VÔ</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleResetToDefault}
-            className="font-['Space_Mono'] text-xs bg-[#2e263f] hover:bg-[#3d3254] text-[#eaddff] font-bold border-[2px] border-black px-2.5 py-1.5 shadow-[2px_2px_0px_#0a0514] cursor-pointer pixel-btn-action flex items-center gap-1"
-            title="Khôi phục lại bộ ảnh"
-          >
-            <span className="material-symbols-outlined text-sm">refresh</span>
-            <span>RESET</span>
-          </button>
+          {isAdmin ? (
+            <>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="font-['Space_Mono'] text-xs bg-[#26c281] hover:bg-[#20a36c] text-[#120a21] font-bold border-[2px] border-black px-3 py-1.5 shadow-[2px_2px_0px_#0a0514] cursor-pointer pixel-btn-action flex items-center gap-1.5"
+                title="Tải lên tệp ảnh gốc của bạn hoặc kéo thả / dán Ctrl+V"
+              >
+                <span className="material-symbols-outlined text-sm">upload_file</span>
+                <span>TẢI ẢNH CỦA BẠN VÔ</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetToDefault}
+                className="font-['Space_Mono'] text-xs bg-[#2e263f] hover:bg-[#3d3254] text-[#eaddff] font-bold border-[2px] border-black px-2.5 py-1.5 shadow-[2px_2px_0px_#0a0514] cursor-pointer pixel-btn-action flex items-center gap-1"
+                title="Khôi phục lại bộ ảnh"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                <span>RESET</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-['Space_Mono'] text-[#d1c5ad] bg-[#120a21] border border-[#5a3696] px-2.5 py-1 shadow-[1px_1px_0px_#000] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[#45b7d1] text-xs">shield</span>
+                <span>Chế độ Người xem (Đã khóa chỉnh sửa)</span>
+              </span>
+              <button
+                type="button"
+                onClick={openLoginModal}
+                className="font-['Space_Mono'] text-xs bg-[#f6c833] hover:bg-[#e0b020] text-[#120a21] font-bold border border-black px-2.5 py-1 shadow-[2px_2px_0px_#0a0514] cursor-pointer flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-xs">key</span>
+                <span>ĐĂNG NHẬP ADMIN</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -274,28 +336,30 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
                   className={`absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full ${item.pinColor} border-2 border-black shadow-[1px_1px_0px_#0a0514] z-10`}
                 />
 
-                {/* Action buttons (available on cards) */}
-                <div className="absolute top-2 right-2 flex items-center gap-1 z-20">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingPhoto(item);
-                    }}
-                    title="Chỉnh sửa tiêu đề & thông tin"
-                    className="w-6 h-6 bg-[#f6c833] hover:bg-[#d4a414] text-[#120a21] text-xs font-bold rounded-none border border-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer"
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => handleRemovePhoto(item.id, e)}
-                    title="Gỡ ảnh này"
-                    className="w-6 h-6 bg-[#ef4444] hover:bg-red-600 text-white text-xs font-bold rounded-none border border-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
+                {/* Action buttons (available on cards) - Admin only */}
+                {isAdmin && (
+                  <div className="absolute top-2 right-2 flex items-center gap-1 z-20">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingPhoto(item);
+                      }}
+                      title="Chỉnh sửa tiêu đề & thông tin"
+                      className="w-6 h-6 bg-[#f6c833] hover:bg-[#d4a414] text-[#120a21] text-xs font-bold rounded-none border border-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleRemovePhoto(item.id, e)}
+                      title="Gỡ ảnh này"
+                      className="w-6 h-6 bg-[#ef4444] hover:bg-red-600 text-white text-xs font-bold rounded-none border border-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
                 <div
                   className={`w-full h-48 overflow-hidden border border-black/20 ${
@@ -324,26 +388,28 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
               </div>
             ))}
 
-            {/* Upload Button Card on Pinboard */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-[#231b34] border-[3px] border-dashed border-[#26c281] p-4 flex flex-col items-center justify-center text-center shadow-[4px_4px_0px_#0a0514] cursor-pointer hover:bg-[#2c2242] transition-colors group"
-            >
-              <div className="w-12 h-12 bg-[#2e263f] border-2 border-[#26c281] rounded-full flex items-center justify-center mb-2 shadow-[2px_2px_0px_#0a0514] group-hover:scale-110 transition-transform">
-                <span className="material-symbols-outlined text-[#26c281] text-2xl">
-                  add_photo_alternate
-                </span>
+            {/* Upload Button Card on Pinboard - Admin only */}
+            {isAdmin && (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-[#231b34] border-[3px] border-dashed border-[#26c281] p-4 flex flex-col items-center justify-center text-center shadow-[4px_4px_0px_#0a0514] cursor-pointer hover:bg-[#2c2242] transition-colors group"
+              >
+                <div className="w-12 h-12 bg-[#2e263f] border-2 border-[#26c281] rounded-full flex items-center justify-center mb-2 shadow-[2px_2px_0px_#0a0514] group-hover:scale-110 transition-transform">
+                  <span className="material-symbols-outlined text-[#26c281] text-2xl">
+                    add_photo_alternate
+                  </span>
+                </div>
+                <div className="font-['Space_Grotesk'] text-sm text-[#26c281] font-bold mb-1">
+                  Ghim ảnh gốc của bạn lên +
+                </div>
+                <p className="font-['Space_Mono'] text-[11px] text-[#f3eeff] mb-2 leading-relaxed">
+                  Click chọn file ảnh máy tính hoặc nhấn <b>Ctrl+V</b> (Paste) để ghim trực tiếp ảnh gốc!
+                </p>
+                <div className="inline-flex items-center gap-1 text-[10px] font-['Space_Mono'] text-[#26c281] bg-[#120a21] px-2 py-1 border border-[#26c281] font-bold">
+                  <span>HỖ TRỢ FILE: JPG, PNG, WEBP</span>
+                </div>
               </div>
-              <div className="font-['Space_Grotesk'] text-sm text-[#26c281] font-bold mb-1">
-                Ghim ảnh gốc của bạn lên +
-              </div>
-              <p className="font-['Space_Mono'] text-[11px] text-[#f3eeff] mb-2 leading-relaxed">
-                Click chọn file ảnh máy tính hoặc nhấn <b>Ctrl+V</b> (Paste) để ghim trực tiếp ảnh gốc!
-              </p>
-              <div className="inline-flex items-center gap-1 text-[10px] font-['Space_Mono'] text-[#26c281] bg-[#120a21] px-2 py-1 border border-[#26c281] font-bold">
-                <span>📂 Hỗ trợ JPG, PNG, WEBP</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -495,18 +561,20 @@ export const PolaroidPinboard: React.FC<PolaroidPinboardProps> = ({ onOpenContac
             <div className="mt-3 font-['Space_Mono']">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-[#1a0f2e]">{selectedPhoto.title}</h4>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingPhoto(selectedPhoto);
-                      setSelectedPhoto(null);
-                    }}
-                    className="text-xs bg-[#f6c833] text-[#120a21] px-2 py-0.5 border border-black font-bold flex items-center gap-1 cursor-pointer hover:bg-[#d4a414]"
-                  >
-                    ✎ Sửa ảnh / Tiêu đề
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingPhoto(selectedPhoto);
+                        setSelectedPhoto(null);
+                      }}
+                      className="text-xs bg-[#f6c833] text-[#120a21] px-2 py-0.5 border border-black font-bold flex items-center gap-1 cursor-pointer hover:bg-[#d4a414]"
+                    >
+                      ✎ Sửa ảnh / Tiêu đề
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex justify-between items-center text-xs mt-1">
                 <span className="text-[#5a3696] font-bold">{selectedPhoto.tags.join(' ')}</span>
